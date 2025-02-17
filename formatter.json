@@ -14,7 +14,7 @@
         },
         "is_active": true,
         "integration_type": "modifier",
-        "integration_category": "Text Processing",
+        "integration_category": "Communication & Collaboration",
         "key_features": [
             "Convert specified words to uppercase",
             "Add bold formatting to words",
