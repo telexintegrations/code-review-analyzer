@@ -1,7 +1,7 @@
 {
   "version": 2,
   "routes": [
-    { "src": "/format-text", "dest": "/api/index" },
-    { "src": "/formatter-json", "dest": "/api/index" }
+    { "src": "/format-text", "dest": "/api/main" },
+    { "src": "/formatter-json", "dest": "/api/main" }
   ]
 }
