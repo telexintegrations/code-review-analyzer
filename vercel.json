@@ -1,16 +1,5 @@
 {
   "version": 2,
-  "build": {
-    "env": {
-      "GO_BUILD_FLAGS": "-ldflags '-s -w'"
-    }
-  },
-  "builds": [
-    {
-      "src": "api/index.go",
-      "use": "@vercel/go"
-    }
-  ],
   "routes": [
     { "src": "/format-text", "dest": "/api/index" },
     { "src": "/formatter-json", "dest": "/api/index" }
