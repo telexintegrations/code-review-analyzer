@@ -8,7 +8,7 @@
         "descriptions": {
             "app_name": "Text Formatter",
             "app_description": "Formats specified words in text to uppercase and bold",
-            "app_logo": "https://severe-alica-raspibtech-438d7195.koyeb.app/logos/formatter.png",
+            "app_logo": "https://severe-alica-raspibtech-438d7195.koyeb.app/static/images/formatter.png",
             "app_url": "https://severe-alica-raspibtech-438d7195.koyeb.app",
             "background_color": "#4A90E2"
         },
