@@ -161,6 +161,11 @@ func enableCORS(handler http.HandlerFunc) http.HandlerFunc {
 func main() {
 	http.HandleFunc("/format-text", enableCORS(handleFormatText))
 	http.HandleFunc("/formatter-json", enableCORS(handleFormatterJSON))
+
+    // Serve static files from the "static" directory
+    fs := http.FileServer(http.Dir("static"))
+    http.Handle("/static/", http.StripPrefix("/static/", fs))
+    
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
