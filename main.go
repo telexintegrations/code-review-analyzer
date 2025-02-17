@@ -116,7 +116,7 @@ func handleFormatText(w http.ResponseWriter, r *http.Request) {
         "event_name": "text_formatted",
         "message":    formattedText,
         "status":     "success",
-        "username":   "text-formatter-bot",
+        "username":   "ibrahim adedayo",
     }
 
     w.Header().Set("Content-Type", "application/json")
