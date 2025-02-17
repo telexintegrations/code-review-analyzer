@@ -1,4 +1,4 @@
-package handler
+package main
 
 import (
     "encoding/json"
@@ -141,14 +141,30 @@ func handleFormatterJSON(w http.ResponseWriter, r *http.Request) {
     w.Write(byteValue)
 }
 
-// Exported function for Vercel
-func Handler(w http.ResponseWriter, r *http.Request) {
-    switch r.URL.Path {
-    case "/format-text":
-        handleFormatText(w, r)
-    case "/formatter-json":
-        handleFormatterJSON(w, r)
-    default:
-        http.NotFound(w, r)
-    }
+func enableCORS(handler http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// Set CORS headers
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+
+		// Handle preflight requests
+		if r.Method == "OPTIONS" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		handler(w, r)
+	}
+}
+
+func main() {
+	http.HandleFunc("/format-text", enableCORS(handleFormatText))
+	http.HandleFunc("/formatter-json", enableCORS(handleFormatterJSON))
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+	log.Printf("Server running on port %s", port)
+	log.Fatal(http.ListenAndServe(":"+port, nil))
 }
