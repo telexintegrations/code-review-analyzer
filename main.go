@@ -6,7 +6,6 @@ import (
     "net/http"
     "os"
     "strings"
-    p "template-go-vercel/api/_pkg"
 )
 
 // Message represents the incoming request structure
