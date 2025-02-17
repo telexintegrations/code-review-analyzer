@@ -28,14 +28,14 @@ type Setting struct {
 type TextFormatter struct {
     targetWords  []string
     preserveCase bool
-    addAsterisk bool
+    addAsterisk  bool
 }
 
 func newTextFormatter() *TextFormatter {
     return &TextFormatter{
         targetWords:  []string{},
         preserveCase: true,
-        addAsterisk: true,
+        addAsterisk:  true,
     }
 }
 
@@ -44,105 +44,93 @@ func (tf *TextFormatter) formatText(text string) string {
     result := make([]string, len(words))
 
     for i, word := range words {
-        // Remove punctuation for comparison but keep it for output
         cleanWord := strings.Trim(word, ".,!?;:")
         punctuation := word[len(cleanWord):]
 
-        // Check if word should be formatted
         for _, target := range tf.targetWords {
             if strings.EqualFold(cleanWord, target) {
-                // Convert to uppercase
                 formattedWord := strings.ToUpper(cleanWord)
-                
-                // Add bold formatting if enabled
                 if tf.addAsterisk {
                     formattedWord = "**" + formattedWord + "**"
                 }
-                
-                // Add back punctuation
                 formattedWord += punctuation
-                
                 result[i] = formattedWord
                 goto nextWord
             }
         }
 
-        // Word not in target list
         if tf.preserveCase {
             result[i] = word
         } else {
             result[i] = strings.ToLower(word)
         }
 
-        nextWord:
+    nextWord:
     }
 
     return strings.Join(result, " ")
 }
 
-func handleFormatText(formatter *TextFormatter) http.HandlerFunc {
-    return func(w http.ResponseWriter, r *http.Request) {
-        if r.Method != http.MethodPost {
-            http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-            return
-        }
+// handleFormatText processes the text formatting request
+func handleFormatText(w http.ResponseWriter, r *http.Request) {
+    if r.Method != http.MethodPost {
+        http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+        return
+    }
 
-        var msgReq Message
-        if err := json.NewDecoder(r.Body).Decode(&msgReq); err != nil {
-            http.Error(w, "Bad request", http.StatusBadRequest)
-            return
-        }
+    var msgReq Message
+    if err := json.NewDecoder(r.Body).Decode(&msgReq); err != nil {
+        http.Error(w, "Bad request", http.StatusBadRequest)
+        return
+    }
 
-        // Update formatter settings from request
-        for _, setting := range msgReq.Settings {
-            switch setting.Label {
-            case "targetWords":
-                if val, ok := setting.Default.(string); ok {
-                    formatter.targetWords = strings.Split(val, ",")
-                    // Trim spaces from words
-                    for i, word := range formatter.targetWords {
-                        formatter.targetWords[i] = strings.TrimSpace(word)
-                    }
-                }
-            case "preserveCase":
-                if val, ok := setting.Default.(bool); ok {
-                    formatter.preserveCase = val
-                }
-            case "addAsterisk":
-                if val, ok := setting.Default.(bool); ok {
-                    formatter.addAsterisk = val
+    formatter := newTextFormatter()
+
+    // Update formatter settings from request
+    for _, setting := range msgReq.Settings {
+        switch setting.Label {
+        case "targetWords":
+            if val, ok := setting.Default.(string); ok {
+                formatter.targetWords = strings.Split(val, ",")
+                for i, word := range formatter.targetWords {
+                    formatter.targetWords[i] = strings.TrimSpace(word)
                 }
             }
+        case "preserveCase":
+            if val, ok := setting.Default.(bool); ok {
+                formatter.preserveCase = val
+            }
+        case "addAsterisk":
+            if val, ok := setting.Default.(bool); ok {
+                formatter.addAsterisk = val
+            }
         }
-
-        // Format the message
-        formattedText := formatter.formatText(msgReq.Message)
-        
-        // Log the transformation
-        log.Printf("Original: %s", msgReq.Message)
-        log.Printf("Formatted: %s", formattedText)
-
-        // Prepare response
-        response := map[string]string{
-            "event_name": "text_formatted",
-            "message":    formattedText,
-            "status":     "success",
-            "username":   "text-formatter-bot",
-        }
-
-        w.Header().Set("Content-Type", "application/json")
-        json.NewEncoder(w).Encode(response)
     }
+
+    formattedText := formatter.formatText(msgReq.Message)
+
+    log.Printf("Original: %s", msgReq.Message)
+    log.Printf("Formatted: %s", formattedText)
+
+    response := map[string]string{
+        "event_name": "text_formatted",
+        "message":    formattedText,
+        "status":     "success",
+        "username":   "text-formatter-bot",
+    }
+
+    w.Header().Set("Content-Type", "application/json")
+    json.NewEncoder(w).Encode(response)
 }
 
+// handleFormatterJSON serves the JSON configuration
 func handleFormatterJSON(w http.ResponseWriter, r *http.Request) {
     if r.Method != http.MethodGet {
         http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
         return
     }
 
-    filePath := "./formatter.json"
-
+    filePath := "./formatter.json" // Ensure this file exists at root
     byteValue, err := os.ReadFile(filePath)
     if err != nil {
         http.Error(w, "Failed to read formatter configuration", http.StatusInternalServerError)
@@ -153,32 +141,14 @@ func handleFormatterJSON(w http.ResponseWriter, r *http.Request) {
     w.Write(byteValue)
 }
 
-func enableCORS(handler http.HandlerFunc) http.HandlerFunc {
-    return func(w http.ResponseWriter, r *http.Request) {
-        w.Header().Set("Access-Control-Allow-Origin", "*")
-        w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
-        w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
-
-        if r.Method == "OPTIONS" {
-            w.WriteHeader(http.StatusOK)
-            return
-        }
-
-        handler(w, r)
+// Exported function for Vercel
+func Handler(w http.ResponseWriter, r *http.Request) {
+    switch r.URL.Path {
+    case "/format-text":
+        handleFormatText(w, r)
+    case "/formatter-json":
+        handleFormatterJSON(w, r)
+    default:
+        http.NotFound(w, r)
     }
-}
-
-func main() {
-    formatter := newTextFormatter()
-
-    http.HandleFunc("/format-text", enableCORS(handleFormatText(formatter)))
-    http.HandleFunc("/formatter-json", enableCORS(handleFormatterJSON))
-
-    port := os.Getenv("PORT")
-    if port == "" {
-        port = "8080"
-    }
-
-    log.Printf("Text formatter server running on port %s", port)
-    log.Fatal(http.ListenAndServe(":"+port, nil))
 }
