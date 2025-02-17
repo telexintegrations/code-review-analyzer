@@ -1,0 +1,13 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "api/index.go",
+      "use": "@vercel/go"
+    }
+  ],
+  "routes": [
+    { "src": "/format-text", "dest": "/api/index" },
+    { "src": "/formatter-json", "dest": "/api/index" }
+  ]
+}

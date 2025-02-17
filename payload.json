@@ -1,0 +1,27 @@
+{
+    "channel_id": "12345",
+    "settings": [
+        {
+            "label": "targetWords",
+            "type": "multi-select",
+            "description": "Words to be formatted in uppercase and bold",
+            "default": "hello, world, test",
+            "required": true
+        },
+        {
+            "label": "preserveCase",
+            "type": "boolean",
+            "description": "Keep original case for non-target words",
+            "default": true,
+            "required": true
+        },
+        {
+            "label": "addAsterisk",
+            "type": "boolean",
+            "description": "Add asterisks for bold formatting",
+            "default": true,
+            "required": true
+        }
+    ],
+    "message": "Hello world! This is a test message for our formatter."
+}
