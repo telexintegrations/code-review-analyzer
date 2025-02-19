@@ -8,8 +8,8 @@
       "descriptions": {
         "app_name": "Code Review Quality Analyzer",
         "app_description": "Analyzes code review comments to improve quality with metrics, trends, and intelligent recommendations",
-        "app_logo": "https://severe-alica-raspibtech-438d7195.koyeb.app/static/images/code-review-analyzer.png",
-        "app_url": "https://severe-alica-raspibtech-438d7195.koyeb.app",
+        "app_logo": "https://colonial-mahala-raspibtech-c9673c64.koyeb.app/static/images/code-review-analyzer.png",
+        "app_url": "https://colonial-mahala-raspibtech-c9673c64.koyeb.app",
         "background_color": "#4A90E2"
       },
       "is_active": true,
@@ -69,7 +69,7 @@
           "description": "Include specific improvement recommendations in the analysis"
         }
       ],
-      "target_url": "https://severe-alica-raspibtech-438d7195.koyeb.app/analyze",
-      "tick_url": "https://severe-alica-raspibtech-438d7195.koyeb.app/analyze"
+      "target_url": "https://colonial-mahala-raspibtech-c9673c64.koyeb.app/analyze",
+      "tick_url": "https://colonial-mahala-raspibtech-c9673c64.koyeb.app/analyze"
     }
   }
