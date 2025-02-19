@@ -1,0 +1,75 @@
+{
+    "data": {
+      "author": "Ibrahim Adedayo",
+      "date": {
+        "created_at": "2025-02-19",
+        "updated_at": "2025-02-19"
+      },
+      "descriptions": {
+        "app_name": "Code Review Quality Analyzer",
+        "app_description": "Analyzes code review comments to improve quality with metrics, trends, and intelligent recommendations",
+        "app_logo": "https://severe-alica-raspibtech-438d7195.koyeb.app/static/images/code-review-analyzer.png",
+        "app_url": "https://severe-alica-raspibtech-438d7195.koyeb.app",
+        "background_color": "#4A90E2"
+      },
+      "is_active": true,
+      "integration_type": "modifier",
+      "integration_category": "Development & Code Management",
+      "key_features": [
+        "AI-powered code review analysis",
+        "Comprehensive quality metrics (thoroughness, clarity, actionability)",
+        "Multi-source support (GitHub, GitLab, Bitbucket)",
+        "Real-time feedback with specific improvement recommendations",
+        "Historical trend tracking and benchmarking"
+      ],
+      "permissions": {
+        "events": [
+          "Receive messages from channels",
+          "Analyze message content",
+          "Return enhanced messages with metrics",
+          "Track anonymized quality metrics over time"
+        ]
+      },
+      "settings": [
+        {
+          "label": "code_source",
+          "type": "dropdown",
+          "required": true,
+          "default": "direct",
+          "options": ["direct", "github", "gitlab", "bitbucket"],
+          "description": "Source of code to analyze"
+        },
+        {
+          "label": "repository_url",
+          "type": "text",
+          "required": false,
+          "default": "",
+          "description": "Repository URL (only required for GitHub/GitLab/Bitbucket)"
+        },
+        {
+          "label": "minimum_quality_threshold",
+          "type": "number",
+          "required": true,
+          "default": "70",
+          "description": "Minimum acceptable quality score (0-100)"
+        },
+        {
+          "label": "analysis_aspects",
+          "type": "multi-checkbox",
+          "required": true,
+          "default": "Thoroughness,Clarity,Actionability",
+          "options": ["Thoroughness", "Clarity", "Actionability"],
+          "description": "Which aspects of the code review to analyze"
+        },
+        {
+          "label": "include_recommendations",
+          "type": "checkbox",
+          "required": true,
+          "default": "true",
+          "description": "Include specific improvement recommendations in the analysis"
+        }
+      ],
+      "target_url": "https://severe-alica-raspibtech-438d7195.koyeb.app/analyze",
+      "tick_url": "https://severe-alica-raspibtech-438d7195.koyeb.app/analyze"
+    }
+  }

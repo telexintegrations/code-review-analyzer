@@ -1,27 +1,31 @@
 {
-    "channel_id": "12345",
-    "settings": [
-        {
-            "label": "targetWords",
-            "type": "multi-select",
-            "description": "Words to be formatted in uppercase and bold",
-            "default": "hello, world, test",
-            "required": true
-        },
-        {
-            "label": "preserveCase",
-            "type": "boolean",
-            "description": "Keep original case for non-target words",
-            "default": true,
-            "required": true
-        },
-        {
-            "label": "addAsterisk",
-            "type": "boolean",
-            "description": "Add asterisks for bold formatting",
-            "default": true,
-            "required": true
-        }
-    ],
-    "message": "Hello world! This is a test message for our formatter."
+  "channel_id": "0192dd70-cdf1-7e15-8776-4fee4a78405e",
+  "message": "In the UserAuthentication.java file, lines 45-52, the token validation logic doesn't handle expired tokens correctly. Consider adding a proper check for token expiration before proceeding with validation:\n\n```java\nif (token.isExpired()) {\n  throw new AuthenticationException(\"Token expired\");\n}\n```\n\nAlso, the current implementation stores sensitive user data in plain text. This is a security vulnerability. You should encrypt this information using industry-standard encryption:\n\n1. Use AES-256 for encrypting sensitive fields\n2. Store encryption keys in a secure vault, not in the code\n3. Consider using a dedicated security library instead of custom implementation\n\nThe error handling in the login method (lines 78-95) catches all exceptions which makes debugging harder. Please refactor to catch specific exceptions and provide meaningful error messages to the user.",
+  "settings": [
+    {
+      "label": "minimum_quality_threshold",
+      "type": "number",
+      "description": "Minimum acceptable quality score (0-100)",
+      "default": "75",
+      "value": "75",
+      "required": true
+    },
+    {
+      "label": "analysis_aspects",
+      "type": "multi-checkbox",
+      "description": "Which aspects of the code review to analyze",
+      "default": "Thoroughness,Clarity,Actionability",
+      "value": "Thoroughness,Clarity,Actionability",
+      "options": ["Thoroughness", "Clarity", "Actionability"],
+      "required": true
+    },
+    {
+      "label": "include_recommendations",
+      "type": "checkbox",
+      "description": "Include specific improvement recommendations in the analysis",
+      "default": "true",
+      "value": "true",
+      "required": true
+    }
+  ]
 }
