@@ -1,4 +1,4 @@
-package main
+package test
 
 import (
 	"bytes"
@@ -149,7 +149,7 @@ func ExampleUsage() {
 }
 
 // test function that runs examples when executed
-func main() {
+func test() {
 	fmt.Println("Running repository integration tests...")
 	TestRepositoryIntegration()
 	fmt.Println("\nRunning repository service examples...")
