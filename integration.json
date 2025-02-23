@@ -2,14 +2,14 @@
     "data": {
       "author": "Ibrahim Adedayo",
       "date": {
-        "created_at": "2025-02-22",
-        "updated_at": "2025-02-22"
+        "created_at": "2025-02-23",
+        "updated_at": "2025-02-23"
       },
       "descriptions": {
         "app_name": "Code Review Quality Analyzer",
         "app_description": "Analyzes code review comments to improve quality with metrics, trends, and intelligent recommendations",
-        "app_logo": "https://general-emmye-raspibtech-abb6391f.koyeb.app/static/images/code-review-analyzer.png",
-        "app_url": "https://general-emmye-raspibtech-abb6391f.koyeb.app",
+        "app_logo": "https://code-review-analyzer.onrender.com/static/images/code-review-analyzer.png",
+        "app_url": "https://code-review-analyzer.onrender.com",
         "background_color": "#4A90E2"
       },
       "is_active": true,
@@ -69,7 +69,7 @@
           "description": "Include specific improvement recommendations in the analysis"
         }
       ],
-      "target_url": "https://general-emmye-raspibtech-abb6391f.koyeb.app/analyze",
-      "tick_url": "https://general-emmye-raspibtech-abb6391f.koyeb.app/analyze"
+      "target_url": "https://code-review-analyzer.onrender.com/analyze",
+      "tick_url": "https://code-review-analyzer.onrender.com/analyze"
     }
   }
