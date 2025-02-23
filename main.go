@@ -561,7 +561,7 @@ func handleCodeReviewAnalysisWithRepo(w http.ResponseWriter, r *http.Request) {
 	if len(filesToAnalyze) == 0 {
         log.Printf("No files to analyze!")
         allRecommendations = append(allRecommendations, "No analyzable files found. Check file types and existence.")
-        metrics := analyzeCodeReview(telexMsg.Message, analysisAspects, repoDir) // Analyze comment
+        metrics := analyzeCodeReview(telexMsg.Message, analysisAspects, "") // Analyze comment
         // totalQualityScore = metrics.OverallQuality                               // Use comment quality
         totalFilesAnalyzed = 0                                                  // No files analyzed
         overallQuality := metrics.OverallQuality // Correctly set overallQuality here!
@@ -580,7 +580,12 @@ func handleCodeReviewAnalysisWithRepo(w http.ResponseWriter, r *http.Request) {
         }
 
         w.Header().Set("Content-Type", "application/json")
-        json.NewEncoder(w).Encode(message)
+        // json.NewEncoder(w).Encode(message)
+        if err := json.NewEncoder(w).Encode(message); err != nil {
+            log.Printf("Error encoding JSON response: %v", err)
+            http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+            return
+        }
 
         if repoDir != "" {
             log.Printf("Repository directory preserved for debugging: %s", repoDir)
