@@ -1,6 +1,8 @@
 package main
 
 import (
+	// "bytes"
+	// "encoding/base64"
 	"context"
 	"encoding/json"
 	"errors"
@@ -10,6 +12,7 @@ import (
 	"path/filepath"
 	"sync"
 
+	// "io"
 	"code-review-analyzer/analyze"
 	"code-review-analyzer/models"
 	"log"
@@ -561,7 +564,7 @@ func handleCodeReviewAnalysisWithRepo(w http.ResponseWriter, r *http.Request) {
 	if len(filesToAnalyze) == 0 {
         log.Printf("No files to analyze!")
         allRecommendations = append(allRecommendations, "No analyzable files found. Check file types and existence.")
-        metrics := analyzeCodeReview(telexMsg.Message, analysisAspects, "") // Analyze comment
+        metrics := analyzeCodeReview(telexMsg.Message, analysisAspects, repoDir) // Analyze comment
         // totalQualityScore = metrics.OverallQuality                               // Use comment quality
         totalFilesAnalyzed = 0                                                  // No files analyzed
         overallQuality := metrics.OverallQuality // Correctly set overallQuality here!
@@ -573,19 +576,14 @@ func handleCodeReviewAnalysisWithRepo(w http.ResponseWriter, r *http.Request) {
         response := generateEnhancedResponse(metrics, includeRecommendations, trends)
 
         message := map[string]string{
-            "event_name": "message_formatted",
+            "event_name": "code_review_analysis",
             "message":    codeAnalysisResponse + response,
             "status":     getQualityStatus(overallQuality), // Use overallQuality here
-            "username":   "Code Review Analyzer Bot",
+            "username":   "Code Review Analyzer",
         }
 
         w.Header().Set("Content-Type", "application/json")
-        // json.NewEncoder(w).Encode(message)
-        if err := json.NewEncoder(w).Encode(message); err != nil {
-            log.Printf("Error encoding JSON response: %v", err)
-            http.Error(w, "Failed to encode response", http.StatusInternalServerError)
-            return
-        }
+        json.NewEncoder(w).Encode(message)
 
         if repoDir != "" {
             log.Printf("Repository directory preserved for debugging: %s", repoDir)
@@ -666,10 +664,10 @@ func handleCodeReviewAnalysisWithRepo(w http.ResponseWriter, r *http.Request) {
     response := generateEnhancedResponse(metrics, includeRecommendations, trends)
 
     message := map[string]string{
-        "event_name": "message_formatted",
+        "event_name": "code_review_analysis",
         "message":    codeAnalysisResponse + response,
         "status":     getQualityStatus(overallQuality), // Use overallQuality here
-        "username":   "Code Review Analyzer Bot",
+        "username":   "Code Review Analyzer",
     }
 
     w.Header().Set("Content-Type", "application/json")
