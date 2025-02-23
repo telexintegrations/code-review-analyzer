@@ -579,8 +579,7 @@ func handleCodeReviewAnalysisWithRepo(w http.ResponseWriter, r *http.Request) {
             "event_name": "code_reviewer_analyzer",
             "message":    codeAnalysisResponse + response,
             "status":     "success", // Use overallQuality here getQualityStatus(overallQuality)
-            // "username":   "Code Review Analyzer",
-            "username":   "Ibrahim Adedayo",
+            "username":   "Code Review Analyzer Bot",
         }
 
         w.Header().Set("Content-Type", "application/json")
@@ -668,8 +667,7 @@ func handleCodeReviewAnalysisWithRepo(w http.ResponseWriter, r *http.Request) {
         "event_name": "code_reviewer",
         "message":    codeAnalysisResponse + response,
         "status":     "success",
-        // "username":   "Code Review Analyzer",
-        "username":   "Ibrahim Adedayo",
+        "username":   "Code Review Analyzer bot",
     }
 
     w.Header().Set("Content-Type", "application/json")
