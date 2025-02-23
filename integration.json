@@ -43,7 +43,7 @@
           "label": "repository_url",
           "type": "text",
           "required": false,
-          "default": "",
+          "default": "https://github.com/tulbadex/fastapi-book-project",
           "description": "Repository URL (only required for GitHub/GitLab/Bitbucket)"
         },
         {

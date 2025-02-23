@@ -576,10 +576,11 @@ func handleCodeReviewAnalysisWithRepo(w http.ResponseWriter, r *http.Request) {
         response := generateEnhancedResponse(metrics, includeRecommendations, trends)
 
         message := map[string]string{
-            "event_name": "code_reviewer",
+            "event_name": "code_reviewer_analyzer",
             "message":    codeAnalysisResponse + response,
             "status":     "success", // Use overallQuality here getQualityStatus(overallQuality)
-            "username":   "code-review-analyzer",
+            // "username":   "Code Review Analyzer",
+            "username":   "Ibrahim Adedayo",
         }
 
         w.Header().Set("Content-Type", "application/json")
@@ -667,7 +668,8 @@ func handleCodeReviewAnalysisWithRepo(w http.ResponseWriter, r *http.Request) {
         "event_name": "code_reviewer",
         "message":    codeAnalysisResponse + response,
         "status":     "success",
-        "username":   "code-review-analyzer",
+        // "username":   "Code Review Analyzer",
+        "username":   "Ibrahim Adedayo",
     }
 
     w.Header().Set("Content-Type", "application/json")
