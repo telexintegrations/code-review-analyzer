@@ -1,8 +1,6 @@
 package main
 
 import (
-	// "bytes"
-	// "encoding/base64"
 	"context"
 	"encoding/json"
 	"errors"
@@ -12,7 +10,6 @@ import (
 	"path/filepath"
 	"sync"
 
-	// "io"
 	"code-review-analyzer/analyze"
 	"code-review-analyzer/models"
 	"log"
@@ -567,7 +564,7 @@ func handleCodeReviewAnalysisWithRepo(w http.ResponseWriter, r *http.Request) {
         metrics := analyzeCodeReview(telexMsg.Message, analysisAspects, repoDir) // Analyze comment
         // totalQualityScore = metrics.OverallQuality                               // Use comment quality
         totalFilesAnalyzed = 0                                                  // No files analyzed
-        // overallQuality := metrics.OverallQuality // Correctly set overallQuality here!
+        overallQuality := metrics.OverallQuality // Correctly set overallQuality here!
 
         // Generate response *before* returning to avoid race conditions
         codeAnalysisResponse := generateCodeAnalysisResponse(analyzedFiles, allRecommendations)
@@ -576,9 +573,9 @@ func handleCodeReviewAnalysisWithRepo(w http.ResponseWriter, r *http.Request) {
         response := generateEnhancedResponse(metrics, includeRecommendations, trends)
 
         message := map[string]string{
-            "event_name": "code_reviewer_analyzer",
+            "event_name": "message_formatted",
             "message":    codeAnalysisResponse + response,
-            "status":     "success", // Use overallQuality here getQualityStatus(overallQuality)
+            "status":     getQualityStatus(overallQuality), // Use overallQuality here
             "username":   "Code Review Analyzer Bot",
         }
 
@@ -601,7 +598,7 @@ func handleCodeReviewAnalysisWithRepo(w http.ResponseWriter, r *http.Request) {
         wg.Add(1)
         go func(file string) {
             defer wg.Done()
-            recs, err := analyzeFile(file, repoDir)
+            recs, err := analyzeFile(file, repoDir, analysisAspects)
             select {
             case <-ctx.Done():
                 results <- analysisResult{file: file, err: ctx.Err()} // Send timeout error
@@ -641,9 +638,9 @@ func handleCodeReviewAnalysisWithRepo(w http.ResponseWriter, r *http.Request) {
         }
     }
 
-    /* overallQuality := 0.0
+    overallQuality := 0.0
     if totalFilesAnalyzed > 0 {
-        // overallQuality = totalQualityScore / float64(totalFilesAnalyzed)
+        overallQuality = totalQualityScore / float64(totalFilesAnalyzed)
     } else {
         metrics := analyzeCodeReview(telexMsg.Message, analysisAspects, repoDir)
         overallQuality = metrics.OverallQuality
@@ -653,7 +650,7 @@ func handleCodeReviewAnalysisWithRepo(w http.ResponseWriter, r *http.Request) {
             overallQuality = 50.0 // Or any other suitable default
             log.Println("WARNING: analyzeCodeReview returned 0.0 for comment analysis. Using default quality score.")
         }
-    } */
+    }
 
     codeAnalysisResponse := generateCodeAnalysisResponse(analyzedFiles, allRecommendations)
 
@@ -664,10 +661,10 @@ func handleCodeReviewAnalysisWithRepo(w http.ResponseWriter, r *http.Request) {
     response := generateEnhancedResponse(metrics, includeRecommendations, trends)
 
     message := map[string]string{
-        "event_name": "code_reviewer",
+        "event_name": "message_formatted",
         "message":    codeAnalysisResponse + response,
-        "status":     "success",
-        "username":   "Code Review Analyzer bot",
+        "status":     getQualityStatus(overallQuality), // Use overallQuality here
+        "username":   "Code Review Analyzer Bot",
     }
 
     w.Header().Set("Content-Type", "application/json")
@@ -701,7 +698,7 @@ func generateCodeAnalysisResponse(analyzedFiles, allRecommendations []string) st
     return codeAnalysisResponse.String()
 }
 
-func analyzeFile(file, repoDir string) ([]string, error) {
+func analyzeFile(file, repoDir string, analysisAspects []string) ([]string, error) {
     lang := detectLanguage(file)
     log.Printf("Analyzing file: %s (language: %s)", file, lang)
 
@@ -839,7 +836,7 @@ func findSimilarFiles(rootDir, targetFile string) ([]string, error) {
     return matches, err
 }
 
-/* func getQualityStatus(overallQuality float64) string {
+func getQualityStatus(overallQuality float64) string {
     threshold := 70.0 // Fixed threshold
 
     if overallQuality < threshold {
@@ -849,7 +846,7 @@ func findSimilarFiles(rootDir, targetFile string) ([]string, error) {
     } else {
         return "Excellent"
     }
-} */
+}
 
 // Regular expression to extract code references (improved format and case-insensitive)
 var codeReferenceRegex = regexp.MustCompile(`(?i)([\w.-/]+):(\d+)(?:-(\d+))?`) // Improved regex, added / for paths
