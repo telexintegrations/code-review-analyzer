@@ -24,10 +24,10 @@
       ],
       "permissions": {
         "events": [
-          "Receive messages from channels",
+          "Receive messages from Telex channels",
           "Analyze message content",
           "Return enhanced messages with metrics",
-          "Track anonymized quality metrics over time"
+          "Log message formatting activity for auditing purposes."
         ]
       },
       "settings": [
@@ -70,6 +70,7 @@
         }
       ],
       "target_url": "https://general-emmye-raspibtech-abb6391f.koyeb.app/analyze",
-      "tick_url": "https://general-emmye-raspibtech-abb6391f.koyeb.app/analyze"
+      "tick_url": "https://general-emmye-raspibtech-abb6391f.koyeb.app/analyze",
+      "website": "https://general-emmye-raspibtech-abb6391f.koyeb.app"
     }
   }

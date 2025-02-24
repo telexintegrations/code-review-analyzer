@@ -642,7 +642,7 @@ func handleCodeReviewAnalysisWithRepo(w http.ResponseWriter, r *http.Request) {
     response := generateEnhancedResponse(metrics, includeRecommendations, trends)
     
     message := map[string]string{
-        "event_name": "code_review_analysis",
+        "event_name": "Code Review Analysis",
         "message":    codeAnalysisResponse.String() + response,
         "status":     "success",
         "username":   "Code Review Analyzer",
