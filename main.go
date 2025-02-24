@@ -3,7 +3,6 @@ package main
 import (
 	// "bytes"
 	// "encoding/base64"
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -564,124 +563,57 @@ func handleCodeReviewAnalysisWithRepo(w http.ResponseWriter, r *http.Request) {
 	if len(filesToAnalyze) == 0 {
         log.Printf("No files to analyze!")
         allRecommendations = append(allRecommendations, "No analyzable files found. Check file types and existence.")
-        metrics := analyzeCodeReview(telexMsg.Message, analysisAspects, repoDir) // Analyze comment
+        // metrics := analyzeCodeReview(telexMsg.Message, analysisAspects, repoDir) // Analyze comment
         // totalQualityScore = metrics.OverallQuality                               // Use comment quality
         totalFilesAnalyzed = 0                                                  // No files analyzed
-        overallQuality := metrics.OverallQuality // Correctly set overallQuality here!
+	} else {
+		var wg sync.WaitGroup // Wait group for goroutines
+		results := make(chan analysisResult) // Channel for analysis results
 
-        // Generate response *before* returning to avoid race conditions
-        codeAnalysisResponse := generateCodeAnalysisResponse(analyzedFiles, allRecommendations)
-        trackAnalysisHistory(telexMsg.ChannelID, metrics, len(telexMsg.Message))
-        trends := getHistoricalTrends(telexMsg.ChannelID)
-        response := generateEnhancedResponse(metrics, includeRecommendations, trends)
+		for _, file := range filesToAnalyze {
+			wg.Add(1)
+			go func(file string) { // Goroutine for each file
+				defer wg.Done()
+				recs, err := analyzeFile(file, repoDir, analysisAspects) // Analyze single file
+				results <- analysisResult{file: file, recommendations: recs, err: err} // Send results
+			}(file)
+		}
 
-        message := map[string]string{
-            "event_name": "code_review_analysis",
-            "message":    codeAnalysisResponse + response,
-            "status":     getQualityStatus(overallQuality), // Use overallQuality here
-            "username":   "Code Review Analyzer",
-        }
+		go func() {
+			wg.Wait()
+			close(results) // Close channel when all goroutines are done
+		}()
 
-        w.Header().Set("Content-Type", "application/json")
-        json.NewEncoder(w).Encode(message)
+		for result := range results { // Process results as they come in
+			if result.err != nil {
+				log.Printf("Error analyzing %s: %v", result.file, result.err)
+				allRecommendations = append(allRecommendations, fmt.Sprintf("## %s\n- Error during analysis: %v", result.file, result.err))
+				continue
+			}
 
-        if repoDir != "" {
-            log.Printf("Repository directory preserved for debugging: %s", repoDir)
-        }
-        return // Important: Return here to avoid further processing                                                 // No files analyzed
+			if len(result.recommendations) > 0 {
+				displayPath := result.file
+				if repoDir != "" && strings.HasPrefix(result.file, repoDir) {
+					displayPath = strings.TrimPrefix(result.file, repoDir)
+					displayPath = strings.TrimPrefix(displayPath, "/")
+				}
+				analyzedFiles = append(analyzedFiles, displayPath)
+				allRecommendations = append(allRecommendations, fmt.Sprintf("## %s\n", displayPath))
+				for _, rec := range result.recommendations {
+					allRecommendations = append(allRecommendations, fmt.Sprintf("- %s", rec))
+				}
+
+				fileMetrics := calculateFileMetrics(result.recommendations, analysisAspects)
+				totalQualityScore += fileMetrics.OverallQuality
+				totalFilesAnalyzed++
+			}
+		}
 	}
 
-	// Parallel analysis of files
-    var wg sync.WaitGroup
-    results := make(chan analysisResult)
-    ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second) // 5-second timeout
-    defer cancel()
-
-    for _, file := range filesToAnalyze {
-        wg.Add(1)
-        go func(file string) {
-            defer wg.Done()
-            recs, err := analyzeFile(file, repoDir, analysisAspects)
-            select {
-            case <-ctx.Done():
-                results <- analysisResult{file: file, err: ctx.Err()} // Send timeout error
-            default:
-                results <- analysisResult{file: file, recommendations: recs, err: err}
-            }
-        }(file)
-    }
-
-    go func() {
-        wg.Wait()
-        close(results)
-    }()
-
-    for result := range results {
-        if result.err != nil {
-            log.Printf("Error analyzing %s: %v", result.file, result.err)
-            allRecommendations = append(allRecommendations, fmt.Sprintf("## %s\n- Error during analysis: %v", result.file, result.err))
-            continue
-        }
-
-        if len(result.recommendations) > 0 {
-            displayPath := result.file
-            if repoDir != "" && strings.HasPrefix(result.file, repoDir) {
-                displayPath = strings.TrimPrefix(displayPath, repoDir)
-                displayPath = strings.TrimPrefix(displayPath, "/")
-            }
-            analyzedFiles = append(analyzedFiles, displayPath)
-            allRecommendations = append(allRecommendations, fmt.Sprintf("## %s\n", displayPath))
-            for _, rec := range result.recommendations {
-                allRecommendations = append(allRecommendations, fmt.Sprintf("- %s", rec))
-            }
-
-            fileMetrics := calculateFileMetrics(result.recommendations, analysisAspects)
-            totalQualityScore += fileMetrics.OverallQuality
-            totalFilesAnalyzed++
-        }
-    }
-
-    overallQuality := 0.0
-    if totalFilesAnalyzed > 0 {
-        overallQuality = totalQualityScore / float64(totalFilesAnalyzed)
-    } else {
-        metrics := analyzeCodeReview(telexMsg.Message, analysisAspects, repoDir)
-        overallQuality = metrics.OverallQuality
-
-		// *** Default quality if analyzeCodeReview still returns 0 ***
-        if overallQuality == 0.0 {
-            overallQuality = 50.0 // Or any other suitable default
-            log.Println("WARNING: analyzeCodeReview returned 0.0 for comment analysis. Using default quality score.")
-        }
-    }
-
-    codeAnalysisResponse := generateCodeAnalysisResponse(analyzedFiles, allRecommendations)
-
-    metrics := analyzeCodeReview(telexMsg.Message, analysisAspects, repoDir) // Analyze code review comment
-    trackAnalysisHistory(telexMsg.ChannelID, metrics, len(telexMsg.Message))
-    trends := getHistoricalTrends(telexMsg.ChannelID)
-
-    response := generateEnhancedResponse(metrics, includeRecommendations, trends)
-
-    message := map[string]string{
-        "event_name": "code_review_analysis",
-        "message":    codeAnalysisResponse + response,
-        "status":     getQualityStatus(overallQuality), // Use overallQuality here
-        "username":   "Code Review Analyzer",
-    }
-
-    w.Header().Set("Content-Type", "application/json")
-    json.NewEncoder(w).Encode(message)
-
-    if repoDir != "" {
-        log.Printf("Repository directory preserved for debugging: %s", repoDir)
-    }
-}
-
-func generateCodeAnalysisResponse(analyzedFiles, allRecommendations []string) string {
+    // Generate response
     var codeAnalysisResponse strings.Builder
     codeAnalysisResponse.WriteString("## Code Analysis Results\n\n")
-
+    
     if len(analyzedFiles) > 0 {
         codeAnalysisResponse.WriteString("### Analyzed Files:\n")
         for _, file := range analyzedFiles {
@@ -698,15 +630,37 @@ func generateCodeAnalysisResponse(analyzedFiles, allRecommendations []string) st
     } else {
         codeAnalysisResponse.WriteString("No issues found in the analyzed files.\n")
     }
-    return codeAnalysisResponse.String()
+
+    // Analyze the code review itself
+    metrics := analyzeCodeReview(telexMsg.Message, analysisAspects, repoDir)
+    log.Printf("Review quality metrics: %+v", metrics)
+
+    // Track history and get trends
+    trackAnalysisHistory(telexMsg.ChannelID, metrics, len(telexMsg.Message))
+    trends := getHistoricalTrends(telexMsg.ChannelID)
+
+    response := generateEnhancedResponse(metrics, includeRecommendations, trends)
+    
+    message := map[string]string{
+        "event_name": "code_review_analysis",
+        "message":    codeAnalysisResponse.String() + response,
+        "status":     "success",
+        "username":   "Code Review Analyzer",
+    }
+
+    if repoDir != "" {
+        // In production, you might want this. For debugging, comment it out
+        os.RemoveAll(repoDir) // Clean up the repository directory
+        log.Printf("Repository directory removed: %s", repoDir)
+    }
+    
+    w.Header().Set("Content-Type", "application/json")
+    json.NewEncoder(w).Encode(message)
 }
 
 func analyzeFile(file, repoDir string, analysisAspects []string) ([]string, error) {
     lang := detectLanguage(file)
     log.Printf("Analyzing file: %s (language: %s)", file, lang)
-
-    var recs []string
-    var err error
 
     content, err := ioutil.ReadFile(file)
     if err != nil {
@@ -719,21 +673,264 @@ func analyzeFile(file, repoDir string, analysisAspects []string) ([]string, erro
         displayPath = strings.TrimPrefix(displayPath, "/")
     }
 
-    switch lang {
-    case "go":
-        recs, err = analyze.AnalyzeGoCode(displayPath, string(content))
-    case "php":
-        recs, err = analyze.AnalyzePHPCode(displayPath, string(content))
-    case "python":
-        recs, err = analyze.AnalyzePythonCode(displayPath, string(content))
-    case "java":
-        recs, err = analyze.AnalyzeJavaCode(displayPath, string(content))
-    // ... other languages
-    default:
-        return nil, fmt.Errorf("language not supported: %s", lang)
+    var allRecs []string
+    
+    // Base analysis for each aspect
+    for _, aspect := range analysisAspects {
+        var aspectRecs []string
+        
+        switch strings.ToLower(aspect) {
+        case "thoroughness":
+            aspectRecs = analyzeThoroughnessForFile(displayPath, string(content), lang)
+        case "clarity":
+            aspectRecs = analyzeClarityForFile(displayPath, string(content), lang)
+        case "actionability":
+            aspectRecs = analyzeActionabilityForFile(displayPath, string(content), lang)
+        }
+        
+        allRecs = append(allRecs, aspectRecs...)
     }
 
-    return recs, err
+    // Language-specific analysis
+    var langRecs []string
+    var langErr error
+    
+    switch lang {
+    case "go":
+        langRecs, langErr = analyze.AnalyzeGoCode(displayPath, string(content))
+    case "php":
+        langRecs, langErr = analyze.AnalyzePHPCode(displayPath, string(content))
+    case "python":
+        langRecs, langErr = analyze.AnalyzePythonCode(displayPath, string(content))
+    case "java":
+        langRecs, langErr = analyze.AnalyzeJavaCode(displayPath, string(content))
+    default:
+        return allRecs, nil // Return aspect-based recommendations for unsupported languages
+    }
+
+    if langErr != nil {
+        // Don't return error, just log it and continue with aspect-based recommendations
+        log.Printf("Language-specific analysis error for %s: %v", displayPath, langErr)
+        return allRecs, nil
+    }
+
+    allRecs = append(allRecs, langRecs...)
+    return allRecs, nil
+}
+
+// New helper functions for aspect-based analysis
+
+func analyzeThoroughnessForFile(filepath, content, lang string) []string {
+    var recs []string
+    
+    // Check for documentation
+    if !hasAdequateDocumentation(content, lang) {
+        recs = append(recs, fmt.Sprintf("Add more documentation to %s to improve code understanding", filepath))
+    }
+    
+    // Check for error handling
+    if !hasAdequateErrorHandling(content, lang) {
+        recs = append(recs, fmt.Sprintf("Improve error handling in %s", filepath))
+    }
+    
+    // Check for test coverage (if it's not a test file)
+    if !strings.Contains(strings.ToLower(filepath), "test") && !hasTestFile(filepath) {
+        recs = append(recs, fmt.Sprintf("Create unit tests for %s", filepath))
+    }
+    
+    // Check for complex functions
+    if complexFunctions := findComplexFunctions(content, lang); len(complexFunctions) > 0 {
+        recs = append(recs, fmt.Sprintf("Consider breaking down complex functions in %s: %s", 
+            filepath, strings.Join(complexFunctions, ", ")))
+    }
+    
+    return recs
+}
+
+func analyzeClarityForFile(filepath, content, lang string) []string {
+    var recs []string
+    
+    // Check naming conventions
+    if badNames := findPoorlyNamedElements(content, lang); len(badNames) > 0 {
+        recs = append(recs, fmt.Sprintf("Improve naming clarity in %s for: %s", 
+            filepath, strings.Join(badNames, ", ")))
+    }
+    
+    // Check code structure
+    if !hasGoodStructure(content, lang) {
+        recs = append(recs, fmt.Sprintf("Improve code structure and organization in %s", filepath))
+    }
+    
+    // Check for overly complex expressions
+    if complexExpr := findComplexExpressions(content); len(complexExpr) > 0 {
+        recs = append(recs, fmt.Sprintf("Simplify complex expressions in %s", filepath))
+    }
+    
+    return recs
+}
+
+func analyzeActionabilityForFile(filepath, content, lang string) []string {
+    var recs []string
+    
+    // Check for TODO comments
+    if todos := findTodoComments(content); len(todos) > 0 {
+        recs = append(recs, fmt.Sprintf("Address TODO comments in %s", filepath))
+    }
+    
+    // Check for deprecated features
+    if deprecated := findDeprecatedUsage(content, lang); len(deprecated) > 0 {
+        recs = append(recs, fmt.Sprintf("Update deprecated features in %s: %s", 
+            filepath, strings.Join(deprecated, ", ")))
+    }
+    
+    // Check for potential improvements
+    if improvements := findPotentialImprovements(content, lang); len(improvements) > 0 {
+        recs = append(recs, improvements...)
+    }
+    
+    return recs
+}
+
+// Helper functions for analysis
+
+func hasAdequateDocumentation(content, lang string) bool {
+    switch lang {
+    case "python":
+        docstrings := regexp.MustCompile(`"""[\s\S]*?"""|'''[\s\S]*?'''`).FindAllString(content, -1)
+        return len(docstrings) > 0
+    case "go":
+        comments := regexp.MustCompile(`//.*|/\*[\s\S]*?\*/`).FindAllString(content, -1)
+        return len(comments) > 0
+    default:
+        return true // Default to true for unsupported languages
+    }
+}
+
+func hasAdequateErrorHandling(content, lang string) bool {
+    switch lang {
+    case "python":
+        return strings.Contains(content, "try:") && strings.Contains(content, "except")
+    case "go":
+        return strings.Contains(content, "if err != nil")
+    default:
+        return true
+    }
+}
+
+func hasTestFile(filepath string) bool {
+    testPath := strings.Replace(filepath, ".py", "_test.py", 1)
+    testPath = strings.Replace(testPath, ".go", "_test.go", 1)
+    _, err := os.Stat(testPath)
+    return err == nil
+}
+
+func findComplexFunctions(content, lang string) []string {
+    var complex []string
+    // Simplified complexity check - looking for nested loops/conditions
+    switch lang {
+    case "python":
+        if matches := regexp.MustCompile(`def\s+(\w+)[^{]*?:`).FindAllStringSubmatch(content, -1); matches != nil {
+            for _, match := range matches {
+                if strings.Count(match[0], "    ") > 2 { // Check indentation level
+                    complex = append(complex, match[1])
+                }
+            }
+        }
+    case "go":
+        if matches := regexp.MustCompile(`func\s+(\w+)[^{]*?{`).FindAllStringSubmatch(content, -1); matches != nil {
+            for _, match := range matches {
+                if strings.Count(match[0], "for") > 1 || strings.Count(match[0], "if") > 2 {
+                    complex = append(complex, match[1])
+                }
+            }
+        }
+    }
+    return complex
+}
+
+func findPoorlyNamedElements(content, lang string) []string {
+    var poorNames []string
+    // Look for single-letter variables and unclear names
+    switch lang {
+    case "python", "go":
+        vars := regexp.MustCompile(`\b[a-z_]+\b`).FindAllString(content, -1)
+        for _, v := range vars {
+            if len(v) == 1 || strings.Contains(v, "temp") || strings.Contains(v, "tmp") {
+                poorNames = append(poorNames, v)
+            }
+        }
+    }
+    return poorNames
+}
+
+func hasGoodStructure(content, lang string) bool {
+    // Basic structure checks
+    switch lang {
+    case "python":
+        // Check for consistent indentation and class/function organization
+        return !strings.Contains(content, "\t") // Python should use spaces
+    case "go":
+        // Check for package organization and proper formatting
+        return strings.HasPrefix(content, "package ") && !strings.Contains(content, "\t\t\t\t")
+    default:
+        return true
+    }
+}
+
+func findComplexExpressions(content string) []string {
+    var complex []string
+    // Look for long lines and nested expressions
+    lines := strings.Split(content, "\n")
+    for _, line := range lines {
+        if len(line) > 100 || strings.Count(line, "&&") > 2 || strings.Count(line, "||") > 2 {
+            complex = append(complex, "Long or complex expression found")
+            break
+        }
+    }
+    return complex
+}
+
+func findTodoComments(content string) []string {
+    todos := regexp.MustCompile(`(?i)//\s*TODO|#\s*TODO|/\*\s*TODO`).FindAllString(content, -1)
+    return todos
+}
+
+func findDeprecatedUsage(content, lang string) []string {
+    var deprecated []string
+    switch lang {
+    case "python":
+        if strings.Contains(content, "print ") || strings.Contains(content, "urllib2") {
+            deprecated = append(deprecated, "print statement (use print())", "urllib2 (use requests)")
+        }
+    case "go":
+        if strings.Contains(content, "ioutil.") {
+            deprecated = append(deprecated, "ioutil (use io/fs)")
+        }
+    }
+    return deprecated
+}
+
+func findPotentialImprovements(content, lang string) []string {
+    var improvements []string
+    
+    // Generic improvements
+    if strings.Count(content, "\n") > 300 {
+        improvements = append(improvements, "Consider breaking this file into smaller modules")
+    }
+    
+    // Language-specific improvements
+    switch lang {
+    case "python":
+        if !strings.Contains(content, "typing.") && !strings.Contains(content, "from typing import") {
+            improvements = append(improvements, "Consider adding type hints for better code maintainability")
+        }
+    case "go":
+        if strings.Contains(content, "var ") && !strings.Contains(content, ":=") {
+            improvements = append(improvements, "Consider using := for shorter variable declarations where appropriate")
+        }
+    }
+    
+    return improvements
 }
 
 // *** NEW FUNCTION: Calculate file metrics from recommendations ***
@@ -839,127 +1036,108 @@ func findSimilarFiles(rootDir, targetFile string) ([]string, error) {
     return matches, err
 }
 
-func getQualityStatus(overallQuality float64) string {
-    threshold := 70.0 // Fixed threshold
-
-    if overallQuality < threshold {
-        return "Inadequate"
-    } else if overallQuality < 85 {
-        return "Acceptable"
-    } else {
-        return "Excellent"
-    }
-}
-
 // Regular expression to extract code references (improved format and case-insensitive)
 var codeReferenceRegex = regexp.MustCompile(`(?i)([\w.-/]+):(\d+)(?:-(\d+))?`) // Improved regex, added / for paths
 
-func analyzeCodeReview(comment string, aspects []string, repoDir string) models.CodeReviewMetrics { // Add repoDir
-	metrics := models.CodeReviewMetrics{
-		Recommendations: []string{},
-	}
-	
-	refs := ExtractCodeReferences(comment) // Extract code references from the comment
-	log.Printf("Found %d code references in comment", len(refs))
+func analyzeCodeReview(comment string, aspects []string, repoDir string) models.CodeReviewMetrics {
+    metrics := models.CodeReviewMetrics{
+        Recommendations: []string{},
+    }
 
-	if len(refs) == 0 {
-        metrics.Recommendations = append(metrics.Recommendations, "No specific code references found. General review based on comment.")
-        // Calculate overall quality based on comment analysis
-        if len(aspects) > 0 {
-            totalAspectScore := metrics.Thoroughness + metrics.Clarity + metrics.Actionability
-            metrics.OverallQuality = totalAspectScore / float64(len(aspects))
-        } else {
-            metrics.OverallQuality = 0 // If no aspects are selected, it can be 0.
-        }
+    // Initialize base scores even without references
+    if comment == "" {
+        metrics.Recommendations = append(metrics.Recommendations, 
+            "No review comment provided. Please add detailed comments about the code.")
         return metrics
     }
 
-	aspectCount := 0
-	aspectSum := 0.0
+    // Calculate base metrics from the comment itself
+    for _, aspect := range aspects {
+        switch strings.ToLower(aspect) {
+        case "thoroughness":
+            metrics.Thoroughness = analyzeThoroughness(comment)
+        case "clarity":
+            metrics.Clarity = analyzeClarity(comment)
+        case "actionability":
+            metrics.Actionability = analyzeActionability(comment)
+        }
+    }
 
-	for _, aspect := range aspects {
-		switch strings.ToLower(aspect) {
-		case "thoroughness":
-			metrics.Thoroughness = analyzeThoroughness(comment) // Can still use comment-based thoroughness
-			aspectSum += metrics.Thoroughness
-			aspectCount++
-		case "clarity":
-			metrics.Clarity = analyzeClarity(comment) // Can still use comment-based clarity
-			aspectSum += metrics.Clarity
-			aspectCount++
-		case "actionability":
-			metrics.Actionability = analyzeActionability(comment) // Can still use comment-based actionability
-			aspectSum += metrics.Actionability
-			aspectCount++
-		}
-	}
+    // Calculate initial overall quality from comment analysis
+    aspectCount := 0
+    aspectSum := 0.0
+    if metrics.Thoroughness > 0 {
+        aspectSum += metrics.Thoroughness
+        aspectCount++
+    }
+    if metrics.Clarity > 0 {
+        aspectSum += metrics.Clarity
+        aspectCount++
+    }
+    if metrics.Actionability > 0 {
+        aspectSum += metrics.Actionability
+        aspectCount++
+    }
 
-	if aspectCount > 0 {
-		metrics.OverallQuality = aspectSum / float64(aspectCount)
-	}
+    if aspectCount > 0 {
+        metrics.OverallQuality = aspectSum / float64(aspectCount)
+    }
 
-	// Generate targeted recommendations
-	for _, ref := range refs {
-		// filePath := fmt.Sprintf("%s/%s", repoDir, ref.Filename) // Construct full file path
-		filePath := filepath.Join(repoDir, ref.Filename) // Use filepath.Join
-        log.Printf("Generating recommendations for file: %s", filePath) // Log file path
-		recommendations := generateTargetedRecommendations(filePath, ref, aspects, repoDir)
-		metrics.Recommendations = append(metrics.Recommendations, recommendations...)
-	}
+    // Extract and analyze code references
+    refs := ExtractCodeReferences(comment)
+    if len(refs) > 0 {
+        for _, ref := range refs {
+            filePath := filepath.Join(repoDir, ref.Filename)
+            recommendations := generateTargetedRecommendations(filePath, ref, aspects, repoDir)
+            metrics.Recommendations = append(metrics.Recommendations, recommendations...)
+        }
+    } else {
+        // Add general recommendations based on the comment content
+        metrics.Recommendations = append(metrics.Recommendations, 
+            "Consider adding specific file references in your review (e.g., filename:line).")
+    }
 
-	return metrics
+    // Ensure minimum quality score based on meaningful content
+    if len(strings.Split(comment, " ")) > 10 && metrics.OverallQuality < 30 {
+        metrics.OverallQuality = 30 // Set minimum score for meaningful comments
+    }
+
+    return metrics
 }
 
 func analyzeThoroughness(comment string) float64 {
-	if comment == "" {
-        return 50 // Default score for empty comment
+    if comment == "" {
+        return 0
     }
 
-	score := 0.0
-	maxScore := 10.0
+    score := 30.0 // Base score for providing any review
+    maxScore := 100.0
 
-	codeRefs := regexp.MustCompile(`(?:line|lines)\s+\d+(?:\s*-\s*\d+)?|function\s+[a-zA-Z0-9_]+|class\s+[a-zA-Z0-9_]+|method\s+[a-zA-Z0-9_]+|file\s+[a-zA-Z0-9_./]+`)
-	codeRefMatches := codeRefs.FindAllString(comment, -1)
-	codeRefScore := math.Min(float64(len(codeRefMatches))*0.8, 3.0)
-	score += codeRefScore
+    // Check for specific file mentions
+    fileRefs := regexp.MustCompile(`(?i)[\/\\]?[\w-]+\.(py|js|go|java|cpp|ts|jsx|tsx)`).FindAllString(comment, -1)
+    score += math.Min(float64(len(fileRefs))*10.0, 20.0)
 
-	technicalTerms := map[string]float64{
-		"performance":     0.5,
-		"security":        0.5,
-		"scalability":     0.5,
-		"maintainability": 0.5,
-		"testing":         0.4,
-		"edge case":       0.4,
-		"complexity":      0.4,
-		"algorithm":       0.4,
-		"pattern":         0.3,
-		"readability":     0.3,
-		"efficiency":      0.4,
-		"memory":          0.4,
-		"time complexity": 0.5,
-		"space complexity": 0.5,
-	}
+    // Check for specific code elements
+    codeElements := regexp.MustCompile(`(?i)(class|function|method|variable|import|module)\s+\w+`).FindAllString(comment, -1)
+    score += math.Min(float64(len(codeElements))*5.0, 15.0)
 
-	technicalScore := 0.0
-	for term, value := range technicalTerms {
-		if strings.Contains(strings.ToLower(comment), term) {
-			technicalScore += value
-		}
-	}
-	score += math.Min(technicalScore, 3.0)
+    // Check for technical depth
+    technicalTerms := []string{
+        "performance", "security", "scalability", "maintainability",
+        "testing", "edge case", "error handling", "validation",
+        "documentation", "optimization", "dependency", "interface",
+    }
+    
+    technicalScore := 0.0
+    for _, term := range technicalTerms {
+        if strings.Contains(strings.ToLower(comment), term) {
+            technicalScore += 5.0
+        }
+    }
+    score += math.Min(technicalScore, 25.0)
 
-	words := strings.Fields(comment)
-	lengthScore := math.Min(float64(len(words))/70.0*2.0, 2.0)
-	score += lengthScore
-
-	bulletPoints := regexp.MustCompile(`(?m)^[\s]*[•\-\*]\s`).FindAllString(comment, -1)
-	numberedPoints := regexp.MustCompile(`(?m)^[\s]*\d+[\.)]\s`).FindAllString(comment, -1)
-	pointsScore := math.Min(float64(len(bulletPoints)+len(numberedPoints))*0.5, 2.0)
-	score += pointsScore
-
-	log.Printf("Thoroughness Score: %f (Comment: %s)", score, comment)
-
-	return (score / maxScore) * 100
+    // Normalize score
+    return math.Min(score, maxScore)
 }
 
 func analyzeClarity(comment string) float64 {
@@ -1053,8 +1231,6 @@ func generateResponse(metrics models.CodeReviewMetrics, includeRecommendations b
     if metrics.Actionability > 0 {
         response += fmt.Sprintf("%s **Actionability**: %.1f%%\n", getQualityEmoji(metrics.Actionability), metrics.Actionability)
     }
-
-    // response += fmt.Sprintf("\n### Overall Quality: %.1f%%\n", metrics.OverallQuality)
 
     if metrics.OverallQuality >= 70 { // Fixed threshold
         response += fmt.Sprintf("\n✅ **Meets quality threshold** (70.0%%)\n")
