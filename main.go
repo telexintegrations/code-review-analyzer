@@ -151,29 +151,6 @@ func (s *RepositoryService) GetFileContent(provider, owner, repo, filepath strin
 	return string(content), nil
 }
 
-// ExtractCodeReferences extracts code references from a comment (improved regex and handling)
-func ExtractCodeReferences(comment string) []models.RepoCodeReference {
-	var refs []models.RepoCodeReference
-	matches := codeReferenceRegex.FindAllStringSubmatch(comment, -1)
-	for _, match := range matches {
-		log.Printf("Match: %v", match)
-		if len(match) >= 3 {
-			filename := match[1]
-			startLine, _ := strconv.Atoi(match[2])
-			endLine := startLine // Default if no end line
-			if len(match) >= 4 && match[3] != "" {
-				endLine, _ = strconv.Atoi(match[3])
-			}
-			refs = append(refs, models.RepoCodeReference{
-				Filename:  filename,
-				LineStart: startLine,
-				LineEnd:   endLine,
-			})
-		}
-	}
-	return refs
-}
-
 func generateTargetedRecommendations(filePath string, ref models.RepoCodeReference, aspects []string, repoDir string) []string {
 	recommendations := []string{}
 
@@ -217,42 +194,6 @@ func generateTargetedRecommendations(filePath string, ref models.RepoCodeReferen
 	}
 
 	return recommendations
-}
-
-// EnhanceCodeReviewWithContext adds repository context to code review comments
-func (s *RepositoryService) EnhanceCodeReviewWithContext(comment, provider, owner, repo string) (string, error) {
-	refs := ExtractCodeReferences(comment)
-	if len(refs) == 0 {
-		return comment, nil
-	}
-
-	var enhancedComment strings.Builder
-	enhancedComment.WriteString(comment)
-	enhancedComment.WriteString("\n\n")
-
-	for _, ref := range refs {
-		content, err := s.GetFileContent(provider, owner, repo, ref.Filename)
-		if err != nil {
-			enhancedComment.WriteString(fmt.Sprintf("Context for %s (lines %d-%d): File not found or error retrieving context.\n\n", ref.Filename, ref.LineStart, ref.LineEnd))
-			continue
-		}
-
-		enhancedComment.WriteString(fmt.Sprintf("Context for %s (lines %d-%d):\n```\n",
-				ref.Filename, ref.LineStart, ref.LineEnd))
-
-		lines := strings.Split(content, "\n")
-		startLine := max(0, ref.LineStart-5)
-		endLine := min(len(lines), ref.LineEnd+5)
-
-		for i := startLine; i < endLine && i < len(lines); i++ {
-			lineNum := i + 1
-			enhancedComment.WriteString(fmt.Sprintf("%d: %s\n", lineNum, lines[i]))
-		}
-
-		enhancedComment.WriteString("```\n\n")
-	}
-
-	return enhancedComment.String(), nil
 }
 
 // handleCodeReviewJSON serves the JSON configuration
@@ -329,6 +270,7 @@ func cloneOrPullRepo(provider, owner, repo, repoDir string) error {
             branchOutput, branchErr := branchCmd.CombinedOutput()
             if branchErr == nil {
                 defaultBranch := extractDefaultBranch(string(branchOutput))
+                log.Printf("Default branch is: %s", defaultBranch)
                 if defaultBranch != "" {
                     log.Printf("Trying pull with default branch: %s", defaultBranch)
                     cmd = exec.Command("git", "pull", "origin", defaultBranch)
@@ -372,28 +314,14 @@ func cloneOrPullRepo(provider, owner, repo, repoDir string) error {
     return nil
 }
 
-func extractDefaultBranch(remoteShowOutput string) string {
-    lines := strings.Split(remoteShowOutput, "\n")
-    for _, line := range lines {
-        if strings.HasPrefix(line, "  HEAD branch:") {
-            parts := strings.Fields(line)
-            if len(parts) > 2 {
-                return parts[2]
-            }
-        }
-    }
-    return ""
-}
-
-// Helper function to extract default branch name
-/* func extractDefaultBranch(output string) string {
+func extractDefaultBranch(output string) string {
     re := regexp.MustCompile(`HEAD branch: (.+)`)
     matches := re.FindStringSubmatch(output)
     if len(matches) > 1 {
         return matches[1]
     }
     return "main" // Fallback to main
-} */
+}
 
 func detectLanguage(filename string) string {
 	ext := strings.ToLower(filepath.Ext(filename))
@@ -499,54 +427,31 @@ func handleCodeReviewAnalysisWithRepo(w http.ResponseWriter, r *http.Request) {
         
         log.Printf("Successfully accessed repository at %s", repoDir)
 
-        // Find code references in the review comment
-        refs := ExtractCodeReferences(telexMsg.Message)
-        log.Printf("Found %d code references in comment", len(refs))
-        
-        if len(refs) > 0 {
-            // If we have specific references, analyze only those files
-            for _, ref := range refs {
-                fullPath := filepath.Join(repoDir, ref.Filename) // Use repoDir!
-                if _, err := os.Stat(fullPath); err == nil {
-                    filesToAnalyze = append(filesToAnalyze, fullPath)
-                    log.Printf("Will analyze referenced file: %s", fullPath)
-                } else {
-                    log.Printf("Referenced file not found: %s (error: %v)", fullPath, err)
-                    matches, _ := findSimilarFiles(repoDir, ref.Filename) // Use repoDir!
-                    for _, match := range matches {
-                        filesToAnalyze = append(filesToAnalyze, match)
-                        log.Printf("Found similar file: %s", match)
-                    }
-                }
-            }
-        }
-        
-        // If no specific files were referenced or found, analyze all applicable files
-        if len(filesToAnalyze) == 0 {
-            log.Printf("No specific files referenced, will scan entire repository")
-            err = filepath.Walk(repoDir, func(path string, info os.FileInfo, err error) error {
-                if err != nil {
-                    return err
-                }
-                if !info.IsDir() {
-                    lang := detectLanguage(path)
-                    if lang != "unknown" {
-                        filesToAnalyze = append(filesToAnalyze, path)
-                        if len(filesToAnalyze) <= 5 { // Log only first few files
-                            log.Printf("Adding file for analysis: %s (lang: %s)", path, lang)
-                        }
-                    }
-                }
-                return nil
-            })
-            
-            log.Printf("Found %d files to analyze in repository", len(filesToAnalyze))
-            
+        // Fix for missing ref.Filename issue - we need to modify this part
+        // Instead of using ref.Filename, let's scan the entire repository
+        log.Printf("Scanning entire repository")
+        err = filepath.Walk(repoDir, func(path string, info os.FileInfo, err error) error {
             if err != nil {
-                log.Printf("Error walking repo directory: %v", err)
-                http.Error(w, fmt.Sprintf("Error scanning repository: %v", err), http.StatusInternalServerError)
-                return
+                return err
             }
+            if !info.IsDir() {
+                lang := detectLanguage(path)
+                if lang != "unknown" {
+                    filesToAnalyze = append(filesToAnalyze, path)
+                    if len(filesToAnalyze) <= 5 { // Log only first few files
+                        log.Printf("Adding file for analysis: %s (lang: %s)", path, lang)
+                    }
+                }
+            }
+            return nil
+        })
+        
+        log.Printf("Found %d files to analyze in repository", len(filesToAnalyze))
+        
+        if err != nil {
+            log.Printf("Error walking repo directory: %v", err)
+            http.Error(w, fmt.Sprintf("Error scanning repository: %v", err), http.StatusInternalServerError)
+            return
         }
     } else {
         // Direct code analysis path would be here
@@ -562,9 +467,6 @@ func handleCodeReviewAnalysisWithRepo(w http.ResponseWriter, r *http.Request) {
 
 	if len(filesToAnalyze) == 0 {
         log.Printf("No files to analyze!")
-        allRecommendations = append(allRecommendations, "No analyzable files found. Check file types and existence.")
-        // metrics := analyzeCodeReview(telexMsg.Message, analysisAspects, repoDir) // Analyze comment
-        // totalQualityScore = metrics.OverallQuality                               // Use comment quality
         totalFilesAnalyzed = 0                                                  // No files analyzed
 	} else {
 		var wg sync.WaitGroup // Wait group for goroutines
@@ -632,11 +534,9 @@ func handleCodeReviewAnalysisWithRepo(w http.ResponseWriter, r *http.Request) {
     }
 
     // Analyze the code review itself
-    metrics := analyzeCodeReview(telexMsg.Message, analysisAspects, repoDir)
+    metrics := analyzeCodeReview(telexMsg.Message, analysisAspects)
     log.Printf("Review quality metrics: %+v", metrics)
 
-    // Track history and get trends
-    trackAnalysisHistory(telexMsg.ChannelID, metrics, len(telexMsg.Message))
     trends := getHistoricalTrends(telexMsg.ChannelID)
 
     response := generateEnhancedResponse(metrics, includeRecommendations, trends)
@@ -1012,34 +912,10 @@ func calculateAspectScore(recs []string, aspect string) float64 {
     return score // Adjust normalization as needed (e.g., divide by max possible score)
 }
 
-// Helper function to find files with similar names
-func findSimilarFiles(rootDir, targetFile string) ([]string, error) {
-    targetLower := strings.ToLower(targetFile)
-    ext := filepath.Ext(targetLower)
-    
-    var matches []string
-    err := filepath.Walk(rootDir, func(path string, info os.FileInfo, err error) error {
-        if err != nil {
-            return err
-        }
-        if !info.IsDir() {
-            pathLower := strings.ToLower(path)
-            // Match by extension and contains the base filename
-            if strings.HasSuffix(pathLower, ext) && 
-               strings.Contains(pathLower, strings.TrimSuffix(filepath.Base(targetLower), ext)) {
-                matches = append(matches, path)
-            }
-        }
-        return nil
-    })
-    
-    return matches, err
-}
-
 // Regular expression to extract code references (improved format and case-insensitive)
-var codeReferenceRegex = regexp.MustCompile(`(?i)([\w.-/]+):(\d+)(?:-(\d+))?`) // Improved regex, added / for paths
+// var codeReferenceRegex = regexp.MustCompile(`(?i)([\w.-/]+):(\d+)(?:-(\d+))?`) // Improved regex, added / for paths
 
-func analyzeCodeReview(comment string, aspects []string, repoDir string) models.CodeReviewMetrics {
+func analyzeCodeReview(comment string, aspects []string) models.CodeReviewMetrics {
     metrics := models.CodeReviewMetrics{
         Recommendations: []string{},
     }
@@ -1081,20 +957,6 @@ func analyzeCodeReview(comment string, aspects []string, repoDir string) models.
 
     if aspectCount > 0 {
         metrics.OverallQuality = aspectSum / float64(aspectCount)
-    }
-
-    // Extract and analyze code references
-    refs := ExtractCodeReferences(comment)
-    if len(refs) > 0 {
-        for _, ref := range refs {
-            filePath := filepath.Join(repoDir, ref.Filename)
-            recommendations := generateTargetedRecommendations(filePath, ref, aspects, repoDir)
-            metrics.Recommendations = append(metrics.Recommendations, recommendations...)
-        }
-    } else {
-        // Add general recommendations based on the comment content
-        metrics.Recommendations = append(metrics.Recommendations, 
-            "Consider adding specific file references in your review (e.g., filename:line).")
     }
 
     // Ensure minimum quality score based on meaningful content
@@ -1246,30 +1108,6 @@ func generateResponse(metrics models.CodeReviewMetrics, includeRecommendations b
     }
 
     return response
-}
-
-// Function to track and analyze historical trends
-func trackAnalysisHistory(channelID string, metrics models.CodeReviewMetrics, commentLength int) {
-	history := models.AnalysisHistory{
-		Date:            time.Now(),
-		OverallQuality: metrics.OverallQuality,
-		CommentLength:   commentLength,
-	}
-
-	if _, exists := analysisHistories[channelID]; !exists {
-		analysisHistories[channelID] = []models.AnalysisHistory{}
-	}
-
-	analysisHistories[channelID] = append(analysisHistories[channelID], history)
-
-	/* if len(analysisHistories[channelID]) > 100 {
-		analysisHistories[channelID] = analysisHistories[channelID][1:]
-	} */
-
-	// Keep only the last 10 entries (for example)
-	if len(analysisHistories[channelID]) > 10 {
-		analysisHistories[channelID] = analysisHistories[channelID][len(analysisHistories[channelID])-10:]
-	}
 }
 
 var analysisHistoriesMutex sync.RWMutex // Add mutex for concurrent access
